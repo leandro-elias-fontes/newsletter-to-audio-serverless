@@ -7,12 +7,12 @@ Eu assinava várias newsletters técnicas e acabava acumulando quase todas na ca
 1. Um cron no GitHub Actions roda todo dia às 07h (BRT).
 2. O script busca os e-mails não lidos das últimas 24h via **Gmail API**.
 3. O **BeautifulSoup** limpa o HTML (CSS, scripts, trackers e rodapés de descadastro) antes de mandar o texto para o modelo.
-4. O **Gemini 2.5 Flash** (com saída estruturada em Pydantic) separa o que é newsletter do que é e-mail comum (banco, faculdade, pessoal, etc.).
+4. O **Gemini 3.8 Flash** (com saída estruturada em Pydantic) separa o que é newsletter do que é e-mail comum (banco, faculdade, pessoal, etc.).
 5. Apenas os e-mails classificados como newsletter são marcados como lidos no Gmail — o resto fica intacto.
 6. O modelo gera um roteiro corrido em português, o **edge-tts** converte em `.mp3` e o arquivo vai para o meu chat no **Telegram**.
 
 ```
-Gmail (não lidos) -> BeautifulSoup -> Gemini 2.5 Flash -> marca só newsletters como lidas
+Gmail (não lidos) -> BeautifulSoup -> Gemini 3.8 Flash -> marca só newsletters como lidas
                                               |
                                               v
                                      roteiro PT-BR -> edge-tts (.mp3) -> Telegram

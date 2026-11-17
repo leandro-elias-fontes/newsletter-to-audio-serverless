@@ -28,7 +28,7 @@ jobs:
         env:
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
-          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_MODEL: gemini-3.8-flash
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}

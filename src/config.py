@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     gemini_api_key_1: str = Field(..., min_length=1)
     gemini_api_key_2: str = Field(default="")
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_model: str = Field(default="gemini-3.8-flash")
 
     gmail_client_id: str = Field(default="")
     gmail_client_secret: str = Field(default="")

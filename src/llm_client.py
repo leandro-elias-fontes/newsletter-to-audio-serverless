@@ -52,7 +52,7 @@ class GeminiRotatingClient:
     def __init__(
         self,
         api_keys: list[str],
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.8-flash",
         cache: SQLitePromptCache | None = None,
     ) -> None:
         if not api_keys:

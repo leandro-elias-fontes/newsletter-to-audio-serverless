@@ -32,9 +32,9 @@ def test_clean_email_html_removes_noise_and_tracking() -> None:
 def test_sqlite_prompt_cache_roundtrip(tmp_path: Path) -> None:
     db_file = tmp_path / "cache.sqlite"
     cache = SQLitePromptCache(str(db_file))
-    assert cache.get("gemini-2.5-flash", "oi", "text") is None
-    cache.set("gemini-2.5-flash", "oi", "olá", "text")
-    assert cache.get("gemini-2.5-flash", "oi", "text") == "olá"
+    assert cache.get("gemini-3.8-flash", "oi", "text") is None
+    cache.set("gemini-3.8-flash", "oi", "olá", "text")
+    assert cache.get("gemini-3.8-flash", "oi", "text") == "olá"
 
 
 @patch("src.main.send_audio_to_telegram")
