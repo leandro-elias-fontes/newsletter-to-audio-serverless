@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import TypeVar
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -25,7 +26,7 @@ class SQLitePromptCache:
 
     @staticmethod
     def _hash_key(model: str, prompt: str, schema_name: str) -> str:
-        payload = f"{model}::{schema_name}::{prompt}".encode("utf-8")
+        payload = f"{model}::{schema_name}::{prompt}".encode()
         return hashlib.sha256(payload).hexdigest()
 
     def get(self, model: str, prompt: str, schema_name: str = "text") -> str | None:
@@ -92,7 +93,7 @@ class GeminiRotatingClient:
                 if self._cache:
                     self._cache.set(self._model, prompt, raw_json, schema_name)
                 return parsed
-            except Exception as exc:
+            except (genai_errors.APIError, ValidationError, OSError) as exc:
                 last_exc = exc
 
         raise RuntimeError(f"Falha em todas as chaves Gemini: {last_exc}") from last_exc
@@ -117,7 +118,7 @@ class GeminiRotatingClient:
                 if self._cache and text:
                     self._cache.set(self._model, prompt, text, "text")
                 return text
-            except Exception as exc:
+            except (genai_errors.APIError, OSError) as exc:
                 last_exc = exc
 
         raise RuntimeError(f"Falha em todas as chaves Gemini: {last_exc}") from last_exc

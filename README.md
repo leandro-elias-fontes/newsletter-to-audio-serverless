@@ -1,42 +1,58 @@
-# 🎙️ Newsletter-to-Audio Serverless (Custo R$ 0,00)
+# Newsletter-to-Audio
 
-Automação pessoal 100% serverless (roda diariamente na nuvem com o PC desligado) que lê e-mails não lidos no **Gmail**, filtra apenas **newsletters informativas** com **Gemini 2.5 Flash** (*Structured Outputs*), mantém e-mails pessoais intactos como não lidos, sintetiza um briefing em áudio neural em português (**5 a 10 min**) via **Edge-TTS** e envia o `.mp3` direto no **Telegram**.
+Eu assinava várias newsletters técnicas e acabava acumulando quase todas na caixa de entrada sem tempo para ler. Criei esse script para resumir as edições não lidas do dia em um áudio de 5 a 10 minutos e mandar direto no meu Telegram toda manhã, rodando de graça no GitHub Actions.
 
----
+## Como funciona
 
-## 🏗️ Arquitetura Serverless (R$ 0,00)
+1. Um cron no GitHub Actions roda todo dia às 07h (BRT).
+2. O script busca os e-mails não lidos das últimas 24h via **Gmail API**.
+3. O **BeautifulSoup** limpa o HTML (CSS, scripts, trackers e rodapés de descadastro) antes de mandar o texto para o modelo.
+4. O **Gemini 2.5 Flash** (com saída estruturada em Pydantic) separa o que é newsletter do que é e-mail comum (banco, faculdade, pessoal, etc.).
+5. Apenas os e-mails classificados como newsletter são marcados como lidos no Gmail — o resto fica intacto.
+6. O modelo gera um roteiro corrido em português, o **edge-tts** converte em `.mp3` e o arquivo vai para o meu chat no **Telegram**.
 
-```mermaid
-flowchart LR
-    GHA["GitHub Actions (cron diário)"] --> GMAIL["Gmail API (Busca não lidos)"]
-    GMAIL --> BS4["BeautifulSoup (Limpa HTML)"]
-    BS4 --> GEM["gemini-2.5-flash (Rotação 2 Chaves + Pydantic)"]
-    GEM -- "is_newsletter = true" --> MARK["Gmail API (Marca SÓ newsletters como lidas)"]
-    GEM --> SCRIPT["Roteiro PT-BR (5-10 min)"]
-    SCRIPT --> TTS["edge-tts (Voz Neural PT-BR gratuita)"]
-    TTS --> TG["Telegram Bot API (.mp3 no celular)"]
+```
+Gmail (não lidos) -> BeautifulSoup -> Gemini 2.5 Flash -> marca só newsletters como lidas
+                                              |
+                                              v
+                                     roteiro PT-BR -> edge-tts (.mp3) -> Telegram
 ```
 
-### Princípios Aplicados
-- **Custo Zero Real:** Sem servidores pagos, sem OpenAI, sem Whisper/ElevenLabs. Usa apenas GitHub Actions (free tier), Google AI Studio (2 chaves gratuitas em rotação), Gmail API e `edge-tts`.
-- **Economia de Tokens:** Limpeza determinística de HTML (`BeautifulSoup` + regex) antes de enviar ao LLM + `SQLitePromptCache` opcional para testes locais.
-- **Triagem Segura:** Apenas mensagens classificadas como `is_newsletter=True` no schema Pydantic perdem a tag `UNREAD`.
+## Estrutura
 
----
+- `src/gmail_service.py`: leitura de e-mails e remoção da label `UNREAD` apenas nas newsletters processadas.
+- `src/html_cleaner.py`: limpeza determinística do HTML.
+- `src/llm_client.py`: cliente do `google-genai` com rotação entre duas chaves gratuitas e cache SQLite opcional para testes locais.
+- `src/newsletter_processor.py`: classificação e geração do roteiro.
+- `src/audio_generator.py`: síntese de voz com `edge-tts`.
+- `src/telegram_notifier.py`: envio do `.mp3` pela Bot API do Telegram.
+- `scripts/auth_gmail.py`: script local para gerar o `refresh_token` OAuth2 do Gmail uma única vez.
 
-## 🚀 Como Configurar e Rodar na Nuvem
+## Configuração
 
-1. **Clonar e instalar localmente (opcional para testes):**
-   ```bash
-   pip install -e .
-   pytest -v
-   ```
-2. **Gerar o `GMAIL_REFRESH_TOKEN` (apenas 1 vez):**
-   - Crie credenciais OAuth2 (Desktop App) no Google Cloud Console com a **Gmail API** ativada e salve como `credentials.json` na raiz.
-   - Rode `python scripts/auth_gmail.py` e autorize no navegador.
-3. **Configurar os *GitHub Secrets* no repositório:**
-   - `GEMINI_API_KEY_1` e `GEMINI_API_KEY_2`
-   - `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`
-   - `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`
-4. **Executar:**
-   - O workflow `.github/workflows/daily_newsletter_podcast.yml` roda automaticamente todos os dias às **07h00 BRT** (`10:00 UTC`), ou manualmente pela aba **Actions -> Run workflow**.
+### 1. Instalar dependências e rodar testes
+
+```bash
+pip install -e .
+pytest -v
+```
+
+### 2. Gerar credenciais do Gmail (1 vez)
+
+No Google Cloud Console, ative a **Gmail API**, crie um OAuth Client ID (Desktop App) e baixe o arquivo como `credentials.json` na raiz do projeto. Depois rode:
+
+```bash
+python scripts/auth_gmail.py
+```
+
+Autorize sua conta no navegador e guarde o `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` e `GMAIL_REFRESH_TOKEN` impressos no terminal.
+
+### 3. Secrets no GitHub Actions
+
+Em **Settings > Secrets and variables > Actions**, adicione:
+
+- `GEMINI_API_KEY_1` e `GEMINI_API_KEY_2`
+- `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`
+- `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`
+
+Para testar na hora sem esperar o cron, basta ir em **Actions > Daily Newsletter Podcast > Run workflow**.
