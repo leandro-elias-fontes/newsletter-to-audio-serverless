@@ -5,6 +5,20 @@ on:
     # 10:00 UTC = 07:00 BRT (Horário de Brasília)
     - cron: "0 10 * * *"
   workflow_dispatch:
+    inputs:
+      gmail_query:
+        description: "Filtro de busca no Gmail (ex: is:unread newer_than:2d)"
+        required: false
+        default: "is:unread newer_than:1d"
+        type: string
+      notify_when_empty:
+        description: "Enviar aviso no Telegram se nenhuma newsletter for encontrada"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   run-briefing:
@@ -28,11 +42,25 @@ jobs:
         env:
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
-          GEMINI_MODEL: gemini-3.8-flash
+          GEMINI_MODEL: gemini-3.5-flash-lite
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_QUERY: ${{ inputs.gmail_query || 'is:unread newer_than:1d' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUBSCRIBERS_FILE: subscribers.json
+          NOTIFY_WHEN_EMPTY: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_when_empty != false && 'true' || 'false' }}
           ENABLE_LOCAL_CACHE: "false"
         run: python -m src.main
+
+      - name: Persist new Telegram subscribers
+        if: always()
+        run: |
+          if [ -f subscribers.json ] && ! git diff --quiet subscribers.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add subscribers.json
+            git commit -m "chore: update telegram subscribers [skip ci]"
+            git push
+          fi

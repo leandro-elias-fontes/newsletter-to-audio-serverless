@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import TypeVar
 
+import httpx
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
@@ -14,10 +15,15 @@ from pydantic import BaseModel, ValidationError
 T = TypeVar("T", bound=BaseModel)
 
 FALLBACK_MODELS = (
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
     "gemini-3.8-flash",
-    "gemini-3.8-flash-lite",
     "gemini-3.5-flash",
-    "gemini-3.0-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
 )
 
 
@@ -60,7 +66,7 @@ class GeminiRotatingClient:
     def __init__(
         self,
         api_keys: list[str],
-        model: str = "gemini-3.8-flash",
+        model: str = "gemini-3.5-flash-lite",
         cache: SQLitePromptCache | None = None,
     ) -> None:
         if not api_keys:
@@ -69,13 +75,25 @@ class GeminiRotatingClient:
         self._model = model
         self._cache = cache
         self._key_index = 0
+        self._cached_candidates: list[str] | None = None
 
     def _next_client(self) -> genai.Client:
         key = self._api_keys[self._key_index % len(self._api_keys)]
         self._key_index += 1
-        return genai.Client(api_key=key)
+        return genai.Client(
+            api_key=key,
+            http_options=types.HttpOptions(timeout=20000),
+        )
 
     def _candidate_models(self) -> list[str]:
+        if self._cached_candidates is not None:
+            if self._model in self._cached_candidates:
+                ordered = [self._model] + [
+                    m for m in self._cached_candidates if m != self._model
+                ]
+                self._cached_candidates = ordered
+            return list(self._cached_candidates)
+
         models = [self._model]
         for candidate in FALLBACK_MODELS:
             if candidate not in models:
@@ -86,13 +104,23 @@ class GeminiRotatingClient:
                 name = (item.name or "").removeprefix("models/")
                 if (
                     "flash" in name
-                    and not any(x in name for x in ("tts", "image", "audio", "embedding", "2.0", "1.5", "2.5"))
+                    and not any(x in name for x in ("tts", "image", "audio", "embedding", "1.5"))
                     and name not in models
                 ):
                     models.append(name)
-        except (genai_errors.APIError, OSError):
-            pass
-        return models
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Gemini] Aviso ao listar modelos dinâmicos: {exc}", flush=True)
+
+        self._cached_candidates = models
+        return list(self._cached_candidates)
+
+    def _promote_model(self, working_model: str) -> None:
+        """Promove o modelo que respondeu com sucesso para evitar retentativas lentas nos próximos e-mails."""
+        self._model = working_model
+        if self._cached_candidates is not None:
+            self._cached_candidates = [working_model] + [
+                m for m in self._cached_candidates if m != working_model
+            ]
 
     def generate_structured(self, prompt: str, schema: type[T]) -> T:
         """Gera saída tipada via Pydantic usando Structured Outputs do Gemini com fallback."""
@@ -118,11 +146,24 @@ class GeminiRotatingClient:
                     )
                     raw_json = response.text or "{}"
                     parsed = schema.model_validate_json(raw_json)
+                    self._promote_model(candidate_model)
                     if self._cache:
                         self._cache.set(self._model, prompt, raw_json, schema_name)
+                    print(f"[Gemini] Classificação concluída via {candidate_model}.", flush=True)
                     return parsed
-                except (genai_errors.APIError, ValidationError, OSError) as exc:
+                except (
+                    genai_errors.APIError,
+                    ValidationError,
+                    httpx.HTTPError,
+                    OSError,
+                    Exception,  # noqa: BLE001
+                ) as exc:
                     last_exc = exc
+                    print(
+                        f"[Gemini] Falha em {candidate_model} (tentativa {attempt + 1}/{len(self._api_keys)}): "
+                        f"{type(exc).__name__}: {exc}",
+                        flush=True,
+                    )
                     time.sleep(1.5 * (attempt + 1))
 
         raise RuntimeError(f"Falha em todas as chaves/modelos Gemini: {last_exc}") from last_exc
@@ -145,11 +186,23 @@ class GeminiRotatingClient:
                         config=types.GenerateContentConfig(temperature=0.4),
                     )
                     text = (response.text or "").strip()
+                    self._promote_model(candidate_model)
                     if self._cache and text:
                         self._cache.set(self._model, prompt, text, "text")
+                    print(f"[Gemini] Roteiro gerado com sucesso via {candidate_model}.", flush=True)
                     return text
-                except (genai_errors.APIError, OSError) as exc:
+                except (
+                    genai_errors.APIError,
+                    httpx.HTTPError,
+                    OSError,
+                    Exception,  # noqa: BLE001
+                ) as exc:
                     last_exc = exc
+                    print(
+                        f"[Gemini] Falha em {candidate_model} (tentativa {attempt + 1}/{len(self._api_keys)}): "
+                        f"{type(exc).__name__}: {exc}",
+                        flush=True,
+                    )
                     time.sleep(1.5 * (attempt + 1))
 
         raise RuntimeError(f"Falha em todas as chaves/modelos Gemini: {last_exc}") from last_exc

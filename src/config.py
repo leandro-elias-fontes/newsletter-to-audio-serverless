@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     gemini_api_key_1: str = Field(..., min_length=1)
     gemini_api_key_2: str = Field(default="")
-    gemini_model: str = Field(default="gemini-3.8-flash")
+    gemini_model: str = Field(default="gemini-3.5-flash-lite")
 
     gmail_client_id: str = Field(default="")
     gmail_client_secret: str = Field(default="")
@@ -21,6 +21,8 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = Field(default="")
     telegram_chat_id: str = Field(default="")
+    subscribers_file: str = Field(default="subscribers.json")
+    notify_when_empty: bool = Field(default=False)
 
     tts_voice: str = Field(default="pt-BR-AntonioNeural")
     tts_rate: str = Field(default="+5%")
@@ -34,3 +36,9 @@ class Settings(BaseSettings):
         if self.gemini_api_key_2.strip():
             keys.append(self.gemini_api_key_2.strip())
         return keys
+
+    def get_telegram_chat_ids(self) -> list[str]:
+        """Retorna lista de chat_ids iniciais configurados (suporta múltiplos separados por vírgula)."""
+        if not self.telegram_chat_id:
+            return []
+        return [cid.strip() for cid in self.telegram_chat_id.split(",") if cid.strip()]
